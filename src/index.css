@@ -1,0 +1,41 @@
+/* === Fonts zuerst === */
+@font-face {
+  font-family: "SangBleu";
+  src: url("./assets/fonts/Saint\ Regular.ttf") format("opentype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "FavoritEdu";
+  src: url("./assets/fonts/Satoshi-Regular.otf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* === Fullscreen reset === */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* === Global defaults for this app === */
+:root {
+  --font-name: "SangBleu", serif;
+  --font-ui: "FavoritEdu", system-ui, sans-serif;
+
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* optional but recommended */
+* {
+  box-sizing: border-box;
+}
