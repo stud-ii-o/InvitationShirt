@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Answers } from "../types";
 import { buildThemeFromNote } from "../utils/theme";
 import { toPng } from "html-to-image";
+import trikotUrl from "/Trikot.svg?url";
 
 export default function ShirtPreview({ answers }: { answers: Answers }) {
   const exportRef = useRef<HTMLDivElement | null>(null);
@@ -10,12 +11,14 @@ export default function ShirtPreview({ answers }: { answers: Answers }) {
 
   const theme = useMemo(() => buildThemeFromNote(answers.note), [answers.note]);
 
-  useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}Trikot.svg`)
-      .then((r) => r.text())
-      .then(setSvgText)
-      .catch((e) => console.error("Failed to load SVG:", e));
-  }, []);
+ useEffect(() => {
+  fetch(trikotUrl)
+    .then((r) => r.text())
+    .then(setSvgText)
+    .catch((e) => {
+      console.error("Failed to load SVG:", e);
+    });
+}, []);
 
   useEffect(() => {
     const wrap = wrapRef.current;
