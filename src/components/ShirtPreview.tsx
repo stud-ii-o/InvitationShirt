@@ -11,7 +11,7 @@ export default function ShirtPreview({ answers }: { answers: Answers }) {
   const theme = useMemo(() => buildThemeFromNote(answers.note), [answers.note]);
 
   useEffect(() => {
-    fetch("/Trikot.svg")
+    fetch(`${import.meta.env.BASE_URL}Trikot.svg`)
       .then((r) => r.text())
       .then(setSvgText)
       .catch((e) => console.error("Failed to load SVG:", e));
