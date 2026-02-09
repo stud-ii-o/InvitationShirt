@@ -1,15 +1,15 @@
 /* === Fonts zuerst === */
 @font-face {
-  font-family: "SangBleu";
-  src: url("./assets/fonts/Saint\ Regular.ttf") format("opentype");
+  font-family: "Saint";
+  src: url("/fonts/Saint%20Regular.ttf") format("truetype");
   font-weight: 700;
   font-style: italic;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "FavoritEdu";
-  src: url("./assets/fonts/Satoshi-Regular.otf") format("truetype");
+  font-family: "Satoshi";
+  src: url("/fonts/Satoshi-Regular.otf") format("opentype");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -27,18 +27,17 @@ body,
 
 /* === Global defaults for this app === */
 :root {
-  --font-name: "SangBleu", serif;
-  --font-ui: "FavoritEdu", system-ui, sans-serif;
+  --font-name: "Saint", serif;
+  --font-ui: "Satoshi", system-ui, sans-serif;
 
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-    --sat: env(safe-area-inset-top, 0px);
+
+  --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
 }
 
-
-/* optional but recommended */
 * {
   box-sizing: border-box;
 }

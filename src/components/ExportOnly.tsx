@@ -83,9 +83,42 @@ export default function ExportOnly({
       }
 
       // Wait for fonts + 2 paint frames
-      if (document.fonts?.ready) await document.fonts.ready;
-      await new Promise((r) => requestAnimationFrame(r));
-      await new Promise((r) => requestAnimationFrame(r));
+  // Wait for fonts (iOS needs explicit loads) + force layout + 2 paint frames
+if (document.fonts?.ready) await document.fonts.ready;
+
+const uiVar = getComputedStyle(document.documentElement)
+  .getPropertyValue("--font-ui")
+  .trim();
+
+const nameVar = getComputedStyle(document.documentElement)
+  .getPropertyValue("--font-name")
+  .trim();
+
+// take the first font name from the var (handles '"Font", serif' cases)
+const firstFont = (v: string) =>
+  v
+    .split(",")[0]
+    .trim()
+    .replace(/^["']|["']$/g, "");
+
+const uiFont = firstFont(uiVar || "system-ui");
+const nameFont = firstFont(nameVar || "system-ui");
+
+// Explicitly load the exact faces/sizes used in the export
+try {
+  await document.fonts.load(`200 34px "${uiFont}"`);
+  await document.fonts.load(`700 43px "${uiFont}"`);
+  await document.fonts.load(`700 172px "${nameFont}"`);
+} catch (e) {
+  console.warn("Font load warning:", e);
+}
+
+// Force a reflow so iOS actually applies the font before rasterizing
+node.getBoundingClientRect();
+
+// Extra settle frames
+await new Promise((r) => requestAnimationFrame(r));
+await new Promise((r) => requestAnimationFrame(r));
 
       const blob = await toBlob(node, {
         cacheBust: true,
