@@ -17,7 +17,7 @@ export default function Landing({
       style={{
         minHeight: "100vh",
         padding: 24,
-        background: "rgba(163, 165, 167, 0.15)",
+        background: "#f1f2f2)",
         fontFamily: "var(--font-ui)",
         color: "#111",
         display: "flex",
