@@ -230,10 +230,11 @@ export default function ExportOnly({
             background: ready ? "#111" : "#999",
             color: "#fff",
             fontWeight: 700,
+            fontFamily: "Satoshi",
             cursor: ready ? "pointer" : "not-allowed",
           }}
         >
-          {exporting ? "Exporting…" : "Download PNG"}
+          {exporting ? "Exporting…" : "Download your Invitation Shirt"}
         </button>
       </div>
 
