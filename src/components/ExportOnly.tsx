@@ -17,6 +17,9 @@ export default function ExportOnly({
   const exportRef = useRef<HTMLDivElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [svgText, setSvgText] = useState("");
+  const [ready, setReady] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const theme = useMemo(() => buildThemeFromNote(answers.note), [answers.note]);
 
@@ -24,8 +27,11 @@ export default function ExportOnly({
   useEffect(() => {
     fetch(trikotUrl)
       .then((r) => r.text())
-      .then(setSvgText)
-      .catch((e) => console.error("Failed to load SVG:", e));
+      .then((t) => setSvgText(t))
+      .catch((e) => {
+        console.error("Failed to load SVG:", e);
+        setError("Could not load the shirt template.");
+      });
   }, []);
 
   // 2) Apply theme to injected SVG
@@ -59,7 +65,7 @@ export default function ExportOnly({
     }
   }, [svgText, theme]);
 
-  // 3) Export once when everything is actually rendered
+  // 3) Mark as ready once SVG exists in DOM + fonts likely available
   useEffect(() => {
     if (!svgText) return;
 
@@ -67,58 +73,93 @@ export default function ExportOnly({
       const node = exportRef.current;
       if (!node) return;
 
-      // Wait until SVG exists in the export node
-      const waitForSvg = async () => {
-        for (let i = 0; i < 60; i++) {
-          if (node.querySelector("svg")) return true;
-          await new Promise((r) => requestAnimationFrame(r));
-        }
-        return false;
-      };
-
-      const ok = await waitForSvg();
-      if (!ok) {
-        console.error("Export aborted: SVG never appeared in DOM");
-        return;
+      // wait until SVG is actually in DOM
+      for (let i = 0; i < 60; i++) {
+        if (node.querySelector("svg")) break;
+        await new Promise((r) => requestAnimationFrame(r));
       }
 
-      // Wait for fonts + 2 paint frames
-  // Wait for fonts (iOS needs explicit loads) + force layout + 2 paint frames
-if (document.fonts?.ready) await document.fonts.ready;
+      // Font loading (iOS Safari needs explicit loads)
+      try {
+        if (document.fonts?.ready) await document.fonts.ready;
+        await document.fonts.load('200 34px "Satoshi"');
+        await document.fonts.load('700 italic 43px "Satoshi"');
+        await document.fonts.load('700 italic 172px "Saint"');
+        if (document.fonts?.ready) await document.fonts.ready;
+      } catch (e) {
+        console.warn("Font load warning:", e);
+      }
 
-const uiVar = getComputedStyle(document.documentElement)
-  .getPropertyValue("--font-ui")
-  .trim();
+      // settle frames
+      node.getBoundingClientRect();
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
 
-const nameVar = getComputedStyle(document.documentElement)
-  .getPropertyValue("--font-name")
-  .trim();
+      setReady(true);
+    };
 
-// take the first font name from the var (handles '"Font", serif' cases)
-const firstFont = (v: string) =>
-  v
-    .split(",")[0]
-    .trim()
-    .replace(/^["']|["']$/g, "");
+    run();
+  }, [svgText]);
 
-const uiFont = firstFont(uiVar || "system-ui");
-const nameFont = firstFont(nameVar || "system-ui");
+  const saveBlobEverywhere = async (blob: Blob, fileName: string) => {
+    // Best on mobile: share sheet (iOS + Android where supported)
+    const file = new File([blob], fileName, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "2nd May, 8PM" });
+        return "shared";
+      } catch {
+        // ignore and fallback
+      }
+    }
 
-// Explicitly load the exact faces/sizes used in the export
-try {
-  await document.fonts.load(`200 34px "${uiFont}"`);
-  await document.fonts.load(`700 43px "${uiFont}"`);
-  await document.fonts.load(`700 172px "${nameFont}"`);
-} catch (e) {
-  console.warn("Font load warning:", e);
-}
+    const url = URL.createObjectURL(blob);
 
-// Force a reflow so iOS actually applies the font before rasterizing
-node.getBoundingClientRect();
+    // Try normal download (works on many desktop + some Android browsers)
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
 
-// Extra settle frames
-await new Promise((r) => requestAnimationFrame(r));
-await new Promise((r) => requestAnimationFrame(r));
+    // On iOS / some mobile browsers download attribute may be ignored.
+    // Open in new tab so the user can "Save Image".
+    // (Do this only if download likely did nothing)
+    setTimeout(() => {
+      try {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch {
+        // If popup blocked, at least keep url alive briefly
+      }
+      // revoke later (keep enough time for new tab)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }, 250);
+
+    return "downloaded";
+  };
+
+  const handleExportClick = async () => {
+    setError(null);
+    setExporting(true);
+
+    try {
+      const node = exportRef.current;
+      if (!node) throw new Error("Export node missing");
+
+      // Ensure fonts (again) right before snapshot
+      try {
+        if (document.fonts?.ready) await document.fonts.ready;
+        await document.fonts.load('200 34px "Satoshi"');
+        await document.fonts.load('700 italic 43px "Satoshi"');
+        await document.fonts.load('700 italic 172px "Saint"');
+        if (document.fonts?.ready) await document.fonts.ready;
+      } catch {}
+
+      node.getBoundingClientRect();
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => requestAnimationFrame(r));
 
       const blob = await toBlob(node, {
         cacheBust: true,
@@ -126,40 +167,19 @@ await new Promise((r) => requestAnimationFrame(r));
         backgroundColor: "#f1f2f2",
       });
 
-      if (!blob) {
-        console.error("Export failed: blob is null");
-        return;
-      }
+      if (!blob) throw new Error("Blob is null");
 
       const fileName = `invitation-shirt-${answers.name || "export"}.png`;
-      const file = new File([blob], fileName, { type: "image/png" });
-
-      // Mobile: share sheet if available
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: "Invitation Shirt" });
-          onDone?.();
-          return;
-        } catch {
-          // fall back to download
-        }
-      }
-
-      // Download fallback
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await saveBlobEverywhere(blob, fileName);
 
       onDone?.();
-    };
-
-    run();
-  }, [svgText, answers.name, onDone]);
+    } catch (e: any) {
+      console.error(e);
+      setError("Export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div
@@ -170,9 +190,37 @@ await new Promise((r) => requestAnimationFrame(r));
         display: "grid",
         placeItems: "center",
         fontFamily: "var(--font-ui)",
+        padding: 24,
       }}
     >
-      <div>Preparing your Invitation Shirt…</div>
+      <div style={{ textAlign: "center", maxWidth: 320 }}>
+        <div style={{ fontSize: 16, marginBottom: 10 }}>
+          {ready ? "Ready to download." : "Preparing your Invitation Shirt…"}
+        </div>
+
+        {error && (
+          <div style={{ color: "#b00020", fontSize: 14, marginBottom: 10 }}>
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={handleExportClick}
+          disabled={!ready || exporting}
+          style={{
+            width: 240,
+            padding: "12px 14px",
+            borderRadius: 14,
+            border: "1px solid rgba(0,0,0,0.2)",
+            background: !ready || exporting ? "rgba(0,0,0,0.15)" : "#111",
+            color: "#fff",
+            fontWeight: 700,
+            cursor: !ready || exporting ? "not-allowed" : "pointer",
+          }}
+        >
+          {exporting ? "Exporting…" : "Download PNG"}
+        </button>
+      </div>
 
       {/* Invisible-but-rendered export layer (must be IN viewport) */}
       <div
@@ -181,11 +229,10 @@ await new Promise((r) => requestAnimationFrame(r));
           inset: 0,
           display: "grid",
           placeItems: "center",
-          opacity: 0,
+          opacity: 0.01, // important: iOS needs it not fully invisible
           pointerEvents: "none",
         }}
       >
-        {/* This is the exact canvas we export */}
         <div
           ref={exportRef}
           style={{
@@ -203,13 +250,13 @@ await new Promise((r) => requestAnimationFrame(r));
             dangerouslySetInnerHTML={{ __html: svgText }}
           />
 
-          {/* TEXT OVERLAY (px-based) */}
+          {/* TEXT OVERLAY */}
           <div
             style={{
               position: "absolute",
               inset: 0,
               pointerEvents: "none",
-              fontFamily: "var(--font-ui)",
+              fontFamily: "Satoshi",
               fontWeight: 200,
               color: "#000",
             }}
@@ -242,8 +289,10 @@ await new Promise((r) => requestAnimationFrame(r));
           >
             <div
               style={{
-                fontFamily: "var(--font-name)",
+                fontFamily: "Saint",
                 fontSize: 172,
+                fontStyle: "italic",
+                fontWeight: 700,
                 lineHeight: 1,
                 textAlign: "left",
                 transform: "translateX(65px)",
@@ -254,7 +303,7 @@ await new Promise((r) => requestAnimationFrame(r));
 
             <div
               style={{
-                fontFamily: "var(--font-ui)",
+                fontFamily: "Satoshi",
                 fontSize: 43,
                 fontStyle: "italic",
                 lineHeight: 3.5,

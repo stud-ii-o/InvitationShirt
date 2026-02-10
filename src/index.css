@@ -1,7 +1,7 @@
 /* === Fonts zuerst === */
 @font-face {
   font-family: "Saint";
-  src: url("/fonts/Saint%20Regular.ttf") format("truetype");
+  src: url("/fonts/Saint-Regular.ttf") format("truetype");
   font-weight: 700;
   font-style: italic;
   font-display: swap;
