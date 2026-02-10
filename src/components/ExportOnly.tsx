@@ -61,8 +61,11 @@ export default function ExportOnly({
     for (const [layerId, visible] of Object.entries(theme.visibility)) {
       const g = svg.getElementById(layerId) as SVGGElement | null;
       if (!g) continue;
-      (g as any).style.display = visible ? "" : "none";
-    }
+        if (!visible) {
+    g.remove(); 
+  }
+}
+    
   }, [svgText, theme]);
 
   // 3) Mark as ready once SVG exists in DOM + fonts likely available
@@ -84,7 +87,7 @@ export default function ExportOnly({
         if (document.fonts?.ready) await document.fonts.ready;
         await document.fonts.load('200 34px "Satoshi"');
         await document.fonts.load('700 italic 43px "Satoshi"');
-        await document.fonts.load('700 italic 172px "Saint"');
+        await document.fonts.load('700 normal 172px "Saint"');
         if (document.fonts?.ready) await document.fonts.ready;
       } catch (e) {
         console.warn("Font load warning:", e);
@@ -189,7 +192,7 @@ export default function ExportOnly({
         background: "#f1f2f2",
         display: "grid",
         placeItems: "center",
-        fontFamily: "var(--font-ui)",
+        fontFamily: "Satoshi",
         padding: 24,
       }}
     >
@@ -291,7 +294,7 @@ export default function ExportOnly({
               style={{
                 fontFamily: "Saint",
                 fontSize: 172,
-                fontStyle: "italic",
+                fontStyle: "normal",
                 fontWeight: 700,
                 lineHeight: 1,
                 textAlign: "left",
