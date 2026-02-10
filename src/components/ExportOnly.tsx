@@ -23,24 +23,12 @@ export default function ExportOnly({
 
   const theme = useMemo(() => buildThemeFromNote(answers.note), [answers.note]);
 
-  // 1) Load SVG
-  useEffect(() => {
-    fetch(trikotUrl)
-      .then((r) => r.text())
-      .then((t) => setSvgText(t))
-      .catch((e) => {
-        console.error("Failed to load SVG:", e);
-        setError("Could not load the shirt template.");
-      });
-  }, []);
-
-  // 2) Apply theme to injected SVG
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-
-    const svg = wrap.querySelector("svg") as SVGSVGElement | null;
-    if (!svg) return;
+  // 1) Load SVG + bake theme & visibility directly into SVG string
+useEffect(() => {
+  const bakeSvg = (raw: string) => {
+    const doc = new DOMParser().parseFromString(raw, "image/svg+xml");
+    const svg = doc.querySelector("svg");
+    if (!svg) return raw;
 
     const paintGroup = (group: Element, color: string) => {
       const nodes = group.querySelectorAll<SVGElement>(
@@ -52,57 +40,67 @@ export default function ExportOnly({
       });
     };
 
+    // Apply fills
     for (const [layerId, color] of Object.entries(theme.fills)) {
-      const g = svg.getElementById(layerId) as SVGGElement | null;
+      const g = svg.querySelector(`#${CSS.escape(layerId)}`);
       if (!g) continue;
       paintGroup(g, color);
     }
 
+    // Remove ALL inactive pattern layers (hard remove)
     for (const [layerId, visible] of Object.entries(theme.visibility)) {
-      const g = svg.getElementById(layerId) as SVGGElement | null;
+      const g = svg.querySelector(`#${CSS.escape(layerId)}`);
       if (!g) continue;
-        if (!visible) {
-    g.remove(); 
-  }
-}
-    
-  }, [svgText, theme]);
+      if (!visible) g.remove();
+    }
 
-  // 3) Mark as ready once SVG exists in DOM + fonts likely available
-  useEffect(() => {
-    if (!svgText) return;
+    return new XMLSerializer().serializeToString(doc);
+  };
 
-    const run = async () => {
-      const node = exportRef.current;
-      if (!node) return;
+  fetch(trikotUrl)
+    .then((r) => r.text())
+    .then((raw) => setSvgText(bakeSvg(raw)))
+    .catch((e) => {
+      console.error("Failed to load SVG:", e);
+      setError("Could not load the shirt template.");
+    });
+}, [trikotUrl, theme]);
 
-      // wait until SVG is actually in DOM
-      for (let i = 0; i < 60; i++) {
-        if (node.querySelector("svg")) break;
-        await new Promise((r) => requestAnimationFrame(r));
-      }
+// 3) Mark as ready once SVG exists in DOM + fonts likely available
+useEffect(() => {
+  if (!svgText) return;
 
-      // Font loading (iOS Safari needs explicit loads)
-      try {
-        if (document.fonts?.ready) await document.fonts.ready;
-        await document.fonts.load('200 34px "Satoshi"');
-        await document.fonts.load('700 italic 43px "Satoshi"');
-        await document.fonts.load('700 normal 172px "Saint"');
-        if (document.fonts?.ready) await document.fonts.ready;
-      } catch (e) {
-        console.warn("Font load warning:", e);
-      }
+  const run = async () => {
+    const node = exportRef.current;
+    if (!node) return;
 
-      // settle frames
-      node.getBoundingClientRect();
+    // wait until SVG is in DOM
+    for (let i = 0; i < 60; i++) {
+      if (node.querySelector("svg")) break;
       await new Promise((r) => requestAnimationFrame(r));
-      await new Promise((r) => requestAnimationFrame(r));
+    }
 
-      setReady(true);
-    };
+    // Ensure fonts (Safari)
+    try {
+      if (document.fonts?.ready) await document.fonts.ready;
+      await document.fonts.load('200 34px "Satoshi"');
+      await document.fonts.load('700 italic 43px "Satoshi"');
+      await document.fonts.load('700 normal 172px "Saint"');
+      if (document.fonts?.ready) await document.fonts.ready;
+    } catch {
+      console.warn("Font load warning");
+    }
 
-    run();
-  }, [svgText]);
+    // settle frames
+    node.getBoundingClientRect();
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => requestAnimationFrame(r));
+
+    setReady(true);
+  };
+
+  run();
+}, [svgText]);
 
   const saveBlobEverywhere = async (blob: Blob, fileName: string) => {
     // Best on mobile: share sheet (iOS + Android where supported)

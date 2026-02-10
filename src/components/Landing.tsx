@@ -29,7 +29,7 @@ export default function Landing({
         <div
           style={{
             fontFamily: "var(--font-name)",
-            fontStyle: "italic",
+            fontStyle: "normal",
             fontWeight: 700,
             fontSize: 38,
             lineHeight: 1.05,
