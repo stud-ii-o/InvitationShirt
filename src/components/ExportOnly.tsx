@@ -7,6 +7,23 @@ import trikotUrl from "/Trikot.svg?url";
 const CANVAS_W = 430;
 const CANVAS_H = 932;
 
+/* -------------------- FONT LOADER (Safari-safe) -------------------- */
+async function ensureFont(
+  family: string,
+  url: string,
+  descriptors?: FontFaceDescriptors
+) {
+  try {
+    if ([...document.fonts].some((f) => f.family === family)) return;
+    const face = new FontFace(family, `url(${url})`, descriptors);
+    const loaded = await face.load();
+    document.fonts.add(loaded);
+  } catch (e) {
+    console.warn("Font load failed:", family, e);
+  }
+}
+/* ------------------------------------------------------------------ */
+
 export default function ExportOnly({
   answers,
   onDone,
@@ -15,148 +32,151 @@ export default function ExportOnly({
   onDone?: () => void;
 }) {
   const exportRef = useRef<HTMLDivElement | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [svgText, setSvgText] = useState("");
+
+  const [rawSvg, setRawSvg] = useState("");
   const [ready, setReady] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const theme = useMemo(() => buildThemeFromNote(answers.note), [answers.note]);
 
-  // 1) Load SVG + bake theme & visibility directly into SVG string
-useEffect(() => {
-  const bakeSvg = (raw: string) => {
-    const doc = new DOMParser().parseFromString(raw, "image/svg+xml");
-    const svg = doc.querySelector("svg");
-    if (!svg) return raw;
-
-    const paintGroup = (group: Element, color: string) => {
-      const nodes = group.querySelectorAll<SVGElement>(
-        "path, rect, circle, polygon, ellipse"
-      );
-      nodes.forEach((el) => {
-        el.setAttribute("fill", color);
-        (el as any).style.fill = color;
+  /* -------------------- 1) LOAD SVG -------------------- */
+  useEffect(() => {
+    fetch(trikotUrl)
+      .then((r) => r.text())
+      .then(setRawSvg)
+      .catch((e) => {
+        console.error(e);
+        setError("Could not load shirt template.");
       });
+  }, []);
+
+  /* -------------------- 2) PROCESS SVG STRING (IMPORTANT) -------------------- */
+  const processedSvg = useMemo(() => {
+    if (!rawSvg) return "";
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(rawSvg, "image/svg+xml");
+    const svg = doc.querySelector("svg");
+    if (!svg) return rawSvg;
+
+    // helper: paint any element with shapes inside
+    const paintGroup = (group: Element, color: string) => {
+      group
+        .querySelectorAll<SVGElement>("path, rect, circle, polygon, ellipse")
+        .forEach((el) => {
+          el.setAttribute("fill", color);
+          (el as any).style.fill = color;
+        });
     };
 
     // Apply fills
     for (const [layerId, color] of Object.entries(theme.fills)) {
-      const g = svg.querySelector(`#${CSS.escape(layerId)}`);
-      if (!g) continue;
-      paintGroup(g, color);
+      const el = svg.querySelector(`#${CSS.escape(layerId)}`);
+      if (!el) continue;
+      paintGroup(el, color);
     }
 
-    // Remove ALL inactive pattern layers (hard remove)
-    for (const [layerId, visible] of Object.entries(theme.visibility)) {
-      const g = svg.querySelector(`#${CSS.escape(layerId)}`);
-      if (!g) continue;
-      if (!visible) g.remove();
-    }
+    // Find active pattern id from theme.visibility
+    const activePatternBase =
+      Object.entries(theme.visibility).find(([, v]) => v)?.[0] ?? null;
+
+    // Collect ALL nodes whose id starts with layer-muster-
+    // (handles Illustrator suffix ids like layer-muster-1_000000)
+    const patternNodes = Array.from(svg.querySelectorAll<SVGElement>("[id]")).filter(
+      (n) => n.id.startsWith("layer-muster-")
+    );
+
+    // Keep only the active pattern (prefix match), remove all others
+    patternNodes.forEach((node) => {
+      const keep =
+        activePatternBase &&
+        (node.id === activePatternBase || node.id.startsWith(activePatternBase + "_"));
+
+      if (!keep) {
+        node.parentNode?.removeChild(node);
+      }
+    });
 
     return new XMLSerializer().serializeToString(doc);
-  };
+  }, [rawSvg, theme]);
 
-  fetch(trikotUrl)
-    .then((r) => r.text())
-    .then((raw) => setSvgText(bakeSvg(raw)))
-    .catch((e) => {
-      console.error("Failed to load SVG:", e);
-      setError("Could not load the shirt template.");
-    });
-}, [trikotUrl, theme]);
+  /* -------------------- 3) PREPARE (FONTS + SVG READY) -------------------- */
+  useEffect(() => {
+    if (!processedSvg) return;
 
-// 3) Mark as ready once SVG exists in DOM + fonts likely available
-useEffect(() => {
-  if (!svgText) return;
+    const run = async () => {
+      const node = exportRef.current;
+      if (!node) return;
 
-  const run = async () => {
-    const node = exportRef.current;
-    if (!node) return;
+      // Wait for SVG in DOM
+      for (let i = 0; i < 60; i++) {
+        if (node.querySelector("svg")) break;
+        await new Promise((r) => requestAnimationFrame(r));
+      }
 
-    // wait until SVG is in DOM
-    for (let i = 0; i < 60; i++) {
-      if (node.querySelector("svg")) break;
+      const base = import.meta.env.BASE_URL;
+
+      await ensureFont("Satoshi", `${base}fonts/Satoshi-Regular.otf`, {
+        weight: "100 900",
+        style: "normal",
+      });
+
+      await ensureFont("Saint", `${base}fonts/Saint-Regular.ttf`, {
+        weight: "700",
+        style: "normal",
+      });
+
+      if (document.fonts?.ready) await document.fonts.ready;
+
+      node.getBoundingClientRect();
       await new Promise((r) => requestAnimationFrame(r));
-    }
+      await new Promise((r) => requestAnimationFrame(r));
 
-    // Ensure fonts (Safari)
-    try {
-      if (document.fonts?.ready) await document.fonts.ready;
-      await document.fonts.load('200 34px "Satoshi"');
-      await document.fonts.load('700 italic 43px "Satoshi"');
-      await document.fonts.load('700 normal 172px "Saint"');
-      if (document.fonts?.ready) await document.fonts.ready;
-    } catch {
-      console.warn("Font load warning");
-    }
+      setReady(true);
+    };
 
-    // settle frames
-    node.getBoundingClientRect();
-    await new Promise((r) => requestAnimationFrame(r));
-    await new Promise((r) => requestAnimationFrame(r));
+    run();
+  }, [processedSvg]);
 
-    setReady(true);
-  };
-
-  run();
-}, [svgText]);
-
-  const saveBlobEverywhere = async (blob: Blob, fileName: string) => {
-    // Best on mobile: share sheet (iOS + Android where supported)
+  /* -------------------- 4) SAVE EVERYWHERE -------------------- */
+  const saveEverywhere = async (blob: Blob, fileName: string) => {
     const file = new File([blob], fileName, { type: "image/png" });
+
+    // Share sheet first (best on iOS/Android)
     if (navigator.canShare?.({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: "2nd May, 8PM" });
-        return "shared";
-      } catch {
-        // ignore and fallback
-      }
+        await navigator.share({ files: [file], title: "2nd May, 8pm" });
+        return;
+      } catch {}
     }
 
+    // Download
     const url = URL.createObjectURL(blob);
-
-    // Try normal download (works on many desktop + some Android browsers)
     const a = document.createElement("a");
     a.href = url;
     a.download = fileName;
-    a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
 
-    // On iOS / some mobile browsers download attribute may be ignored.
-    // Open in new tab so the user can "Save Image".
-    // (Do this only if download likely did nothing)
+    // iOS fallback
     setTimeout(() => {
-      try {
-        window.open(url, "_blank", "noopener,noreferrer");
-      } catch {
-        // If popup blocked, at least keep url alive briefly
-      }
-      // revoke later (keep enough time for new tab)
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }, 250);
-
-    return "downloaded";
   };
 
-  const handleExportClick = async () => {
-    setError(null);
+  /* -------------------- 5) EXPORT -------------------- */
+  const handleExport = async () => {
     setExporting(true);
+    setError(null);
 
     try {
       const node = exportRef.current;
-      if (!node) throw new Error("Export node missing");
+      if (!node) throw new Error("Missing export node");
 
-      // Ensure fonts (again) right before snapshot
-      try {
-        if (document.fonts?.ready) await document.fonts.ready;
-        await document.fonts.load('200 34px "Satoshi"');
-        await document.fonts.load('700 italic 43px "Satoshi"');
-        await document.fonts.load('700 italic 172px "Saint"');
-        if (document.fonts?.ready) await document.fonts.ready;
-      } catch {}
+      if (document.fonts?.ready) await document.fonts.ready;
 
       node.getBoundingClientRect();
       await new Promise((r) => requestAnimationFrame(r));
@@ -168,13 +188,11 @@ useEffect(() => {
         backgroundColor: "#f1f2f2",
       });
 
-      if (!blob) throw new Error("Blob is null");
+      if (!blob) throw new Error("Export failed");
 
-      const fileName = `invitation-shirt-${answers.name || "export"}.png`;
-      await saveBlobEverywhere(blob, fileName);
-
+      await saveEverywhere(blob, `invitation-shirt-${answers.name || "export"}.png`);
       onDone?.();
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
       setError("Export failed. Please try again.");
     } finally {
@@ -182,6 +200,7 @@ useEffect(() => {
     }
   };
 
+  /* -------------------- RENDER -------------------- */
   return (
     <div
       style={{
@@ -194,43 +213,38 @@ useEffect(() => {
         padding: 24,
       }}
     >
-      <div style={{ textAlign: "center", maxWidth: 320 }}>
-        <div style={{ fontSize: 16, marginBottom: 10 }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ marginBottom: 12 }}>
           {ready ? "Ready to download." : "Preparing your Invitation Shirt…"}
         </div>
 
-        {error && (
-          <div style={{ color: "#b00020", fontSize: 14, marginBottom: 10 }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ color: "#b00020", marginBottom: 12 }}>{error}</div>}
 
         <button
-          onClick={handleExportClick}
           disabled={!ready || exporting}
+          onClick={handleExport}
           style={{
-            width: 240,
-            padding: "12px 14px",
+            padding: "14px 20px",
             borderRadius: 14,
-            border: "1px solid rgba(0,0,0,0.2)",
-            background: !ready || exporting ? "rgba(0,0,0,0.15)" : "#111",
+            border: "none",
+            background: ready ? "#111" : "#999",
             color: "#fff",
             fontWeight: 700,
-            cursor: !ready || exporting ? "not-allowed" : "pointer",
+            cursor: ready ? "pointer" : "not-allowed",
           }}
         >
           {exporting ? "Exporting…" : "Download PNG"}
         </button>
       </div>
 
-      {/* Invisible-but-rendered export layer (must be IN viewport) */}
+      {/* EXPORT CANVAS (must be visible-ish for iOS) */}
       <div
         style={{
           position: "fixed",
           inset: 0,
           display: "grid",
           placeItems: "center",
-          opacity: 0.01, // important: iOS needs it not fully invisible
+          opacity: 0.01,
           pointerEvents: "none",
         }}
       >
@@ -240,79 +254,63 @@ useEffect(() => {
             width: CANVAS_W,
             height: CANVAS_H,
             position: "relative",
-            overflow: "hidden",
             background: "#f1f2f2",
+            overflow: "hidden",
           }}
         >
-          {/* SVG */}
+          {/* SVG (processed!) */}
           <div
-            ref={wrapRef}
             style={{ position: "absolute", inset: 0 }}
-            dangerouslySetInnerHTML={{ __html: svgText }}
+            dangerouslySetInnerHTML={{ __html: processedSvg }}
           />
 
-          {/* TEXT OVERLAY */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              fontFamily: "Satoshi",
-              fontWeight: 200,
-              color: "#000",
-            }}
-          >
-            <div style={{ position: "absolute", top: 18, left: 17, lineHeight: 1.05 }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
-                <span style={{ fontSize: 34 }}>Hello</span>
-                <span style={{ fontSize: 43, fontStyle: "italic", fontWeight: 700 }}>
-                  {answers.name}
-                </span>
-              </div>
+          {/* TEXT */}
+          <div style={{ position: "absolute", inset: 0, color: "#000" }}>
+<div style={{ position: "absolute", top: 18, left: 17, lineHeight: 1.05 }}>
+  <div style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
+    <span style={{ fontSize: 34 }}>Hello</span>
+    <span style={{ fontSize: 43, fontWeight: 700, fontStyle: "italic" }}>
+      {answers.name}
+    </span>
+  </div>
 
-              <div style={{ fontSize: 34, marginTop: 9 }}>
-                Here is your personalised Invitation Shirt
-              </div>
-            </div>
-          </div>
-
-          {/* BACK PRINT */}
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: 588,
-              transform: "translateX(-50%)",
-              width: 258,
-              pointerEvents: "none",
-              color: "#000",
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "Saint",
-                fontSize: 172,
-                fontStyle: "normal",
-                fontWeight: 700,
-                lineHeight: 1,
-                textAlign: "left",
-                transform: "translateX(65px)",
-              }}
-            >
-              {answers.age}
-            </div>
+  <div style={{ fontSize: 34, marginTop: 9 }}>
+    Here is your personalised Invitation Shirt
+  </div>
+</div>
 
             <div
               style={{
-                fontFamily: "Satoshi",
-                fontSize: 43,
-                fontStyle: "italic",
-                lineHeight: 3.5,
-                textAlign: "center",
-                marginBottom: 9,
+                position: "absolute",
+                left: "50%",
+                top: 588,
+                transform: "translateX(-50%)",
+                width: 258,
               }}
             >
-              {answers.name}
+              <div
+                style={{
+                  fontFamily: "Saint",
+                  fontSize: 172,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  transform: "translateX(65px)",
+                }}
+              >
+                {answers.age}
+              </div>
+
+              <div
+                style={{
+                  fontFamily: "Satoshi",
+                  fontSize: 43,
+                  fontStyle: "italic",
+                  textAlign: "center",
+                  marginTop: 45,
+                }}
+              >
+                {answers.name}
+              </div>
             </div>
           </div>
         </div>
