@@ -28,7 +28,7 @@ export default function Landing({
       <div style={{ width: "100%", maxWidth: 520 }}>
         <div
           style={{
-            fontFamily: "var(--font-name)",
+            fontFamily: "var(--font-ui)",
             fontStyle: "normal",
             fontWeight: 700,
             fontSize: 38,
@@ -36,7 +36,7 @@ export default function Landing({
             marginBottom: 16,
           }}
         >
-          2. May
+          02<br></br>/MAY, 8PM
         </div>
         <div
   style={{
