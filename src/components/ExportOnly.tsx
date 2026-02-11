@@ -229,7 +229,7 @@ export default function ExportOnly({
         fontSize: 14,
         padding: 0,
         paddingTop: 10,
-        paddingBottom: 20,
+        paddingBottom: 100,
       }}
     >
       <div style={{ textAlign: "center", width: "min(560px, 92vw)" }}>
