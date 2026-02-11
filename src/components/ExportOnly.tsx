@@ -348,7 +348,7 @@ export default function ExportOnly({
           {/* TEXT */}
           <div style={{ position: "absolute", inset: 0, color: "#000" }}>
             {/* Header: Hello + Name on one line */}
-            <div style={{ position: "absolute", top: 100, left: 17 }}>
+            <div style={{ position: "absolute", top: 50, left: 17 }}>
               <div
                 style={{
                   display: "flex",
@@ -374,7 +374,7 @@ export default function ExportOnly({
               style={{
                 position: "absolute",
                 left: "50%",
-                top: 540,
+                top: 400,
                 transform: "translateX(-50%)",
                 width: 520,
               }}
