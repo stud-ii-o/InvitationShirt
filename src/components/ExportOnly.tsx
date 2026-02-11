@@ -218,20 +218,28 @@ export default function ExportOnly({
   const showLoader = !previewUrl;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "#f1f2f2",
-        display: "grid",
-        placeItems: "center",
-        fontFamily: "Satoshi",
-        fontSize: 14,
-        padding: 0,
-        paddingTop: 10,
-        paddingBottom: 100,
-      }}
-    >
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "#f1f2f2",
+      fontFamily: "Satoshi",
+      fontSize: 14,
+
+      // KEY:
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+
+      // statt grid-center:
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "flex-start",
+
+      padding: 20,
+      paddingBottom: 120, // genug Luft damit Buttons nicht “unter” Safari UI kleben
+      boxSizing: "border-box",
+    }}
+  >
       <div style={{ textAlign: "center", width: "min(560px, 92vw)" }}>
         {showLoader ? (
           <div style={{ opacity: 0.75 }}>
