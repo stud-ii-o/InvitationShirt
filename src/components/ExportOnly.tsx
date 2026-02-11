@@ -228,6 +228,8 @@ export default function ExportOnly({
         fontFamily: "Satoshi",
         fontSize: 14,
         padding: 0,
+        paddingTop: 10,
+        paddingBottom: 20,
       }}
     >
       <div style={{ textAlign: "center", width: "min(560px, 92vw)" }}>
@@ -349,7 +351,7 @@ export default function ExportOnly({
                 }}
               >
                 <span style={{ fontSize: 75 }}>Hello</span>
-                <span style={{ fontSize: 75, fontWeight: 900, fontStyle: "italic" }}>
+                <span style={{ fontSize: 75, fontWeight: 700, fontStyle: "italic" }}>
                   {answers.name}
                 </span>
               </div>
@@ -386,7 +388,7 @@ export default function ExportOnly({
                   fontFamily: "Satoshi",
                   fontSize: 100,
                   fontStyle: "italic",
-                  fontWeight: 900,
+                  fontWeight: 700,
                   textAlign: "center",
                   marginTop: 390,
                 }}
